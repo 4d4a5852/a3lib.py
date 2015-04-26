@@ -9,6 +9,7 @@ import struct
 import sys
 import os
 import base64
+import shutil
 from collections import OrderedDict
 
 if sys.version > '3':
@@ -573,6 +574,22 @@ def bisign(args):
         if not quiet:
             print("Public key extracted")
 
+def pbo(args):
+    with PboFile(args.pbo) as p:
+        if args.list:
+            for name in p.namelist():
+                print(name)
+        else:
+            for info in p.infolist():
+                with p.open(info) as src:
+                    srcname = src.name.replace('\\', os.path.sep)
+                    dir = os.path.dirname(srcname)
+                    if not (os.path.exists(dir) or dir == ''):
+                        os.makedirs(dir)
+                    with open(srcname, 'wb') as dst:
+                        shutil.copyfileobj(src, dst)
+            pass
+    
 def _test(args):
     pass
     if args.pubin:
@@ -622,6 +639,12 @@ def main():
     parser_bisign.add_argument('--pubout', action='store_true', default=False, help='extract public key from signature')
     parser_bisign.add_argument('sig', help='bisign file')
     parser_bisign.set_defaults(func=bisign)
+    # create the parser for the "pbo" command
+    parser_pbo = subparsers.add_parser('pbo', help='extract/list PBO files')
+    parser_pbo.add_argument('pbo', help='pbo file')
+    parser_pbo.add_argument('-o', '--outdir', default='', help='target directory')
+    parser_pbo.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
+    parser_pbo.set_defaults(func=pbo)
     # create the parser for the "test" command
     parser_test = subparsers.add_parser('test')
     parser_test.add_argument('file', help='file')
