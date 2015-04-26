@@ -10,6 +10,7 @@ import sys
 import os
 import base64
 import shutil
+import fnmatch
 from collections import OrderedDict
 
 if sys.version > '3':
@@ -581,14 +582,14 @@ def pbo(args):
                 print(name)
         else:
             for info in p.infolist():
-                with p.open(info) as src:
-                    srcname = src.name.replace('\\', os.path.sep)
-                    dir = os.path.dirname(srcname)
-                    if not (os.path.exists(dir) or dir == ''):
-                        os.makedirs(dir)
-                    with open(srcname, 'wb') as dst:
-                        shutil.copyfileobj(src, dst)
-            pass
+                if fnmatch.fnmatch(info.filename.lower(), args.include.lower()) and not fnmatch.fnmatch(info.filename.lower(), args.exclude.lower()):
+                    with p.open(info) as src:
+                        srcname = src.name.replace('\\', os.path.sep)
+                        dir = os.path.dirname(srcname)
+                        if not (os.path.exists(dir) or dir == ''):
+                            os.makedirs(dir)
+                        with open(srcname, 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
     
 def _test(args):
     pass
@@ -642,7 +643,8 @@ def main():
     # create the parser for the "pbo" command
     parser_pbo = subparsers.add_parser('pbo', help='extract/list PBO files')
     parser_pbo.add_argument('pbo', help='pbo file')
-    parser_pbo.add_argument('-o', '--outdir', default='', help='target directory')
+    parser_pbo.add_argument('--include', default='*', help='include filter pattern')
+    parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
     parser_pbo.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
     parser_pbo.set_defaults(func=pbo)
     # create the parser for the "test" command
