@@ -397,6 +397,29 @@ class PboFile:
         if verbose > 3:
             print("Done")
 
+    def export(self, file):
+        "Export PBO to a file"
+        if isinstance(file, str):
+            with open(file, 'wb') as f:
+                self._export(f)
+        else:
+            self._export(file)
+
+    def _export(self, file):
+        file.write(struct.pack('<sIIIII', b'\0', self.packing_method, self.original_size, self.reserved, self.time_stamp, self.data_size))
+        for k, v in self.header_extension.items():
+            file.write(struct.pack('{}ss{}ss'.format(len(k), len(v)), k, b'\0', v, b'\0'))
+        file.write(struct.pack('s', b'\0'))
+        for i in self.filelist:
+            file.write(struct.pack('<{}ssIIIII'.format(len(i.filename)), i.filename, b'\0', i.packing_method, i.original_size, i.reserved, i.time_stamp, i.data_size))
+        file.write(struct.pack('<21s', b'\0'*21))
+        for i in self.filelist:
+            with self.open(i) as f:
+                shutil.copyfileobj(f, file)
+        file.write(struct.pack('<21s', b'\0'*21))
+        file.seek(-20, 1)
+        file.write(struct.pack('20B', *int_to_bytes(long(self.hash1().hexdigest(), 16), 20, 'big')))
+
     def getinfo(self, name):
         "Select PboInfo for a member name "
         if name in self.filedict:
@@ -567,6 +590,7 @@ def key(args):
         pkey.public_key.export()
 
 def bisign(args):
+    "Dump bisign or extract its public key"
     bsign = Bisign.from_file(args.sig)
     if not quiet:
         bsign.dump()
@@ -575,14 +599,18 @@ def bisign(args):
         if not quiet:
             print("Public key extracted")
 
-def pbo(args):
-    with PboFile(args.pbo) as p:
-        if args.list:
+def _pbo(args):
+    pbo(args.pbo, args.include, args.exclude, args.list)
+
+def pbo(pbo, include="*", exclude="", list=False):
+    "list or extract pbo"
+    with PboFile(pbo) as p:
+        if list:
             for name in p.namelist():
                 print(name)
         else:
             for info in p.infolist():
-                if fnmatch.fnmatch(info.filename.lower(), args.include.lower()) and not fnmatch.fnmatch(info.filename.lower(), args.exclude.lower()):
+                if fnmatch.fnmatch(info.filename.lower(), include.lower()) and not fnmatch.fnmatch(info.filename.lower(), exclude.lower()):
                     with p.open(info) as src:
                         srcname = src.name.replace('\\', os.path.sep)
                         dir = os.path.dirname(srcname)
@@ -646,7 +674,7 @@ def main():
     parser_pbo.add_argument('--include', default='*', help='include filter pattern')
     parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
     parser_pbo.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
-    parser_pbo.set_defaults(func=pbo)
+    parser_pbo.set_defaults(func=_pbo)
     # create the parser for the "test" command
     parser_test = subparsers.add_parser('test')
     parser_test.add_argument('file', help='file')
