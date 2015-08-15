@@ -607,12 +607,12 @@ def pbo(pbo, include="*", exclude="", list=False):
     with PboFile(pbo) as p:
         if list:
             for name in p.namelist():
-                print(name)
+                print(name.decode())
         else:
             for info in p.infolist():
-                if fnmatch.fnmatch(info.filename.lower(), include.lower()) and not fnmatch.fnmatch(info.filename.lower(), exclude.lower()):
+                if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
                     with p.open(info) as src:
-                        srcname = src.name.replace('\\', os.path.sep)
+                        srcname = src.name.decode().replace('\\', os.path.sep)
                         dir = os.path.dirname(srcname)
                         if not (os.path.exists(dir) or dir == ''):
                             os.makedirs(dir)
