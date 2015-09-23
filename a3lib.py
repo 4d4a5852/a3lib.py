@@ -607,7 +607,8 @@ def pbo(pbo, include="*", exclude="", list=False):
     with PboFile(pbo) as p:
         if list:
             for name in p.namelist():
-                print(name.decode())
+                if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
+                    print(name.decode())
         else:
             for info in p.infolist():
                 if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
