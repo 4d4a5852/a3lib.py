@@ -365,8 +365,7 @@ class PboFile:
         if verbose > 3:
             print("Reading PBO from file:")
         self.mode = mode
-        self.filelist = []
-        self.filedict = {}
+        self.filedict = OrderedDict()
         self._modified = False
         if isinstance(file, str):
             self.filename = file
@@ -386,12 +385,11 @@ class PboFile:
             print("Reading PBOinfos")
         while len(s) != 0:
             info = PboInfo(s, *struct.unpack('<IIIII', self.fp.read(20)))
-            self.filelist.append(info)
             self.filedict[s] = info
             s = unpack_asciiz(self.fp)
         empty = self.fp.read(20)
         data_offset = self.fp.tell()
-        for x in self.filelist:
+        for x in self.filedict.values():
             x.data_offset = data_offset
             data_offset += x.data_size
         if verbose > 3:
@@ -410,10 +408,10 @@ class PboFile:
         for k, v in self.header_extension.items():
             file.write(struct.pack('{}ss{}ss'.format(len(k), len(v)), k, b'\0', v, b'\0'))
         file.write(struct.pack('s', b'\0'))
-        for i in self.filelist:
+        for i in self.filedict.values():
             file.write(struct.pack('<{}ssIIIII'.format(len(i.filename)), i.filename, b'\0', i.packing_method, i.original_size, i.reserved, i.time_stamp, i.data_size))
         file.write(struct.pack('<21s', b'\0'*21))
-        for i in self.filelist:
+        for i in self.filedict.values():
             with self.open(i) as f:
                 shutil.copyfileobj(f, file)
         file.write(struct.pack('<21s', b'\0'*21))
@@ -439,11 +437,11 @@ class PboFile:
 
     def namelist(self):
         "Return list of the PBO's member names"
-        return [data.filename for data in self.filelist]
+        return list(self.filedict.keys())
 
     def infolist(self):
         "Return list of the PBO's members"
-        return self.filelist
+        return list(self.filedict.values())
 
     def open(self, name, mode='r'):
         "Open member as file-like object"
