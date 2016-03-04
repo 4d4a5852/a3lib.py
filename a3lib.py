@@ -11,6 +11,7 @@ import os
 import base64
 import shutil
 import fnmatch
+import tempfile
 from collections import OrderedDict
 
 if sys.version > '3':
@@ -286,27 +287,43 @@ class Bisign:
 
 class PboInfo:
     """PboInfo class"""
-    def __init__(self, filename, packing_method, original_size, reserved, time_stamp, data_size):
+    def __init__(self, filename, packing_method=0, original_size=0, reserved=0, timestamp=0, data_size=-1, fp=None):
         "Initialize PboInfo"
         self.filename = filename
         self.packing_method = packing_method
         self.original_size = original_size
         self.reserved = reserved
-        self.time_stamp = time_stamp
+        self.timestamp = timestamp
         self.data_size = data_size
+        self.fp = fp
         self.data_offset = -1
+
+    def get_data_size(self):
+        "Get the file size of the member"
+        if self.fp is None:
+            return self.data_size
+        else:
+            return os.fstat(self.fp.fileno()).st_size
+
+    def get_timestamp(self):
+        "Get the timestamp of the member"
+        if self.fp is None:
+            return self.timestamp
+        else:
+            return 0 #todo
 
     def check_name_hash(self):
         "Check whether name needs to be hashed"
-        return self.data_size > 0
+        return self.get_data_size() > 0
 
     def check_file_hash(self):
         "Check whether file needs to be hashed"
-        return self.data_size > 0 and self.filename.split(b'.')[-1].lower() not in [b'paa', b'jpg', b'p3d', b'tga', b'rvmat', b'lip', b'ogg', b'wss', b'png', b'rtm', b'pac', b'fxy', b'wrp']
+        return self.get_data_size() > 0 and self.filename.split(b'.')[-1].lower() not in [b'paa', b'jpg', b'p3d', b'tga', b'rvmat', b'lip', b'ogg', b'wss', b'png', b'rtm', b'pac', b'fxy', b'wrp']
 
     def dump(self):
         "Dump PboInfo to console"
-        print(self.filename + "{0} Bytes @ {1:x}".format(self.data_size, self.data_offset))
+        print(self.filename + "{0} Bytes @ {1:x}".format(self.get_data_size(), self.data_offset))
+
 
 class PboExtFile:
     """file object-like class"""
@@ -360,40 +377,47 @@ class PboExtFile:
 
 class PboFile:
     """PBO file class"""
-    def __init__(self, file, mode='rb'):
+    def __init__(self, header = (b'\0', 0x56657273, 0, 0, 0, 0), header_extension=OrderedDict(), filedict=OrderedDict(), filename=None, fp=None):
+        self.header = header
+        self.header_extension = header_extension
+        self.filedict = filedict
+        self.filename = filename
+        self.fp = fp
+
+    @classmethod
+    def from_file(cls, file):
         "Initialize PboFile from file"
         if verbose > 3:
             print("Reading PBO from file:")
-        self.mode = mode
-        self.filedict = OrderedDict()
-        self._modified = False
+        filedict = OrderedDict()
+        #self._modified = False
         if isinstance(file, str):
-            self.filename = file
-            self.fp = open(file, mode)
+            filename = file
+            fp = open(file, 'rb')
         else:
-            self.fp = file
-            self.filename = file.name
-        self.bla = unpack_asciiz(self.fp)
-        self.packing_method, self.original_size, self.reserved, self.time_stamp, self.data_size = struct.unpack('<IIIII', self.fp.read(20))
-        self.header_extension = OrderedDict()
-        s = unpack_asciiz(self.fp)
+            fp = file
+            filename = file.name
+        header = unpack_asciiz(fp), *struct.unpack('<IIIII', fp.read(20))
+        header_extension = OrderedDict()
+        s = unpack_asciiz(fp)
         while len(s) != 0:
-            self.header_extension[s] = unpack_asciiz(self.fp)
-            s = unpack_asciiz(self.fp)
-        s = unpack_asciiz(self.fp)
+            header_extension[s] = unpack_asciiz(fp)
+            s = unpack_asciiz(fp)
+        s = unpack_asciiz(fp)
         if verbose > 3:
             print("Reading PBOinfos")
         while len(s) != 0:
-            info = PboInfo(s, *struct.unpack('<IIIII', self.fp.read(20)))
-            self.filedict[s] = info
-            s = unpack_asciiz(self.fp)
-        empty = self.fp.read(20)
-        data_offset = self.fp.tell()
-        for x in self.filedict.values():
+            info = PboInfo(s, *struct.unpack('<IIIII', fp.read(20)))
+            filedict[s] = info
+            s = unpack_asciiz(fp)
+        empty = fp.read(20)
+        data_offset = fp.tell()
+        for x in filedict.values():
             x.data_offset = data_offset
             data_offset += x.data_size
         if verbose > 3:
             print("Done")
+        return cls(header, header_extension, filedict, filename=filename, fp=fp)
 
     def export(self, file):
         "Export PBO to a file"
@@ -404,20 +428,47 @@ class PboFile:
             self._export(file)
 
     def _export(self, file):
-        file.write(struct.pack('<sIIIII', b'\0', self.packing_method, self.original_size, self.reserved, self.time_stamp, self.data_size))
+        file.write(struct.pack('<sIIIII', *self.header))
         for k, v in self.header_extension.items():
             file.write(struct.pack('{}ss{}ss'.format(len(k), len(v)), k, b'\0', v, b'\0'))
         file.write(struct.pack('s', b'\0'))
-        for i in self.filedict.values():
-            file.write(struct.pack('<{}ssIIIII'.format(len(i.filename)), i.filename, b'\0', i.packing_method, i.original_size, i.reserved, i.time_stamp, i.data_size))
+        for k, v in sorted(self.filedict.items()):
+            file.write(struct.pack('<{}ssIIIII'.format(len(v.filename)), v.filename, b'\0', v.packing_method, v.original_size, v.reserved, v.get_timestamp(), v.get_data_size()))
         file.write(struct.pack('<21s', b'\0'*21))
-        for i in self.filedict.values():
-            with self.open(i) as f:
+        for k, v in sorted(self.filedict.items()):
+            with self.open(v) as f:
                 shutil.copyfileobj(f, file)
         file.write(struct.pack('<21s', b'\0'*21))
         file.seek(-20, 1)
-        file.write(struct.pack('20B', *int_to_bytes(long(self.hash1().hexdigest(), 16), 20, 'big')))
+        #file.write(struct.pack('20B', *int_to_bytes(long(self.hash1(file).hexdigest(), 16), 20, 'big')))
 
+    def add(self, name, file):
+        "Add a file to the PBO"
+        if name.encode() in self.filedict:
+            raise KeyError("{0} exists in PBO".format(name))
+        else:
+            self.filedict[name.encode()] = PboInfo(name.encode(), fp=file)
+
+    def delete(self, name):
+        "Remove a file from the PBO"
+        if isinstance(name, str):
+            return self.filedict.pop(name)
+        else:
+            return self.filedict.pop(name.filename)
+
+#    def rename(self, old, new):
+#        "Rename a file in the PBO"
+#        if isinstance(old, str):
+#            info = self.filedict.pop(old.encode())
+#        else:
+#            info = self.filedict.pop(old.filename.encode())
+#        if new.encode() in self.filedict:
+#            raise KeyError("{0} exists in PBO".format(new))
+#        else:
+#            info.filename = new.encode()
+#            self.filedict[new.encode()]=info
+#            return info
+        
     def getinfo(self, name):
         "Select PboInfo for a member name "
         if name in self.filedict:
@@ -427,7 +478,8 @@ class PboFile:
 
     def close(self):
         "Close the file handle"
-        self.fp.close()
+        if self.fp is not None:
+            self.fp.close()
     def __enter__(self):
         return self
     def __exit__(self, type, value, traceback):
@@ -449,7 +501,10 @@ class PboFile:
             pboinfo = name
         else:
             pboinfo = self.getinfo(name)
-        return PboExtFile(self.fp, pboinfo, mode)
+        if pboinfo.fp is None:
+            return PboExtFile(self.fp, pboinfo, mode)
+        else:
+            return pboinfo.fp
 
     def _namehash(self):
         "Create hash from member names"
@@ -475,27 +530,31 @@ class PboFile:
             filehash.update(b'nothing')
         return filehash
 
-    def hash1(self):
+    def hash1(self, file=None):
         "Calculate first hash value"
         if verbose > 3:
             print("Calculating hash1:")
-        oldpos = self.fp.tell()
-        self.fp.seek(-21, 2)
-        end = self.fp.tell()
-        self.fp.seek(0)
+        if file is None:
+            file = self.fp
+        oldpos = file.tell()
+        file.seek(-21, 2)
+        end = file.tell()
+        file.seek(0)
         hash1 = hashlib.sha1()
         rlen = end
         while rlen > 0:
-            hash1.update(self.fp.read(min(CHUNK_SIZE, rlen)))
-            rlen = end - self.fp.tell()
-        self.fp.seek(oldpos)
+            hash1.update(file.read(min(CHUNK_SIZE, rlen)))
+            rlen = end - file.tell()
+        file.seek(oldpos)
         if verbose > 3:
             print(hash1.hexdigest())
         return hash1
 
-    def hash(self):
+    def hash(self, file=None):
         "Calculate the 3 hash values"
-        hash1 = self.hash1()
+        if file is None:
+            file = self.fp
+        hash1 = self.hash1(file)
         namehash = self._namehash()
         if verbose > 3:
             print("Calculating hash2:")
@@ -524,7 +583,7 @@ def _sign(args):
 def sign(key, pbo, keyform='bi'):
     "Create signature file for private key & PBO"
     pkey = PrivateKey.from_file(key, keyform)
-    with PboFile(pbo) as p:
+    with PboFile.from_file(pbo) as p:
         hash1, hash2, hash3 = p.hash()
     if verbose > 1:
         print("hash1: 0x" + hash1.hexdigest())
@@ -552,7 +611,7 @@ def verify(key, pbo, sig, keyform='bi', privin=False):
         pkey = PrivateKey.from_file(key, keyform).public_key
     else:
         pkey = PublicKey.from_file(key, keyform)
-    with PboFile(pbo) as p:
+    with PboFile.from_file(pbo) as p:
         hash1, hash2, hash3 = p.hash()
     bsign = Bisign.from_file(sig)
     verify1 = (padding(hash1.hexdigest(), pkey.bitlen//8)) == (pow(bsign.sig1, pkey.public_exponent, pkey.modulus))
@@ -598,25 +657,41 @@ def bisign(args):
             print("Public key extracted")
 
 def _pbo(args):
-    pbo(args.pbo, args.include, args.exclude, args.list)
+    pbo(args.file, args.include, args.exclude, create=args.create, extract=args.extract, list=args.list, files=args.files)
 
-def pbo(pbo, include="*", exclude="", list=False):
-    "list or extract pbo"
-    with PboFile(pbo) as p:
-        if list:
-            for name in p.namelist():
-                if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
-                    print(name.decode())
-        else:
-            for info in p.infolist():
-                if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
-                    with p.open(info) as src:
-                        srcname = src.name.decode().replace('\\', os.path.sep)
-                        dir = os.path.dirname(srcname)
-                        if not (os.path.exists(dir) or dir == ''):
-                            os.makedirs(dir)
-                        with open(srcname, 'wb') as dst:
-                            shutil.copyfileobj(src, dst)
+def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, files=[]):
+    "create, list or extract pbo"
+    if create:
+        dir = os.path.dirname(pbo)
+        tmpfile = tempfile.mkstemp(dir=dir)
+        os.close(tmpfile[0])
+        with PboFile() as p:
+            for f in files:
+                p.add(f, open(f, 'rb'))
+            with open(tmpfile[1], 'wb') as t:
+                p.export(t)
+        os.rename(tmpfile[1], pbo)
+    else:
+        with PboFile.from_file(pbo) as p:
+            if list:
+                for name in p.namelist():
+                    if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
+                        print(name.decode())
+            else:
+                if extract:
+                    for info in p.infolist():
+                        if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
+                            with p.open(info) as src:
+                                dst_name = src.name.decode().replace('\\', os.path.sep)
+                                dir = os.path.dirname(dst_name)
+                                if not (os.path.exists(dir) or dir == ''):
+                                    os.makedirs(dir)
+                                with open(dst_name, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
+                                if info.get_timestamp() > 0:
+                                    os.utime(dst_name, (info.get_timestamp(), info.get_timestamp()))
+                else:
+                    pass
     
 def _test(args):
     pass
@@ -635,7 +710,7 @@ def _test(args):
 
 def main():
     # create the parser
-    parser = argparse.ArgumentParser(description='Work with BI signatures and keys.')
+    parser = argparse.ArgumentParser(description='Work with BI PBOs, signatures and keys.')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-v', '--verbose', action='count', default=0, help='increase output verbosity')
     group.add_argument("-q", '--quiet', action='store_true', default=False)
@@ -669,10 +744,14 @@ def main():
     parser_bisign.set_defaults(func=bisign)
     # create the parser for the "pbo" command
     parser_pbo = subparsers.add_parser('pbo', help='extract/list PBO files')
-    parser_pbo.add_argument('pbo', help='pbo file')
+    pbo_mode_group = parser_pbo.add_mutually_exclusive_group()
+    parser_pbo.add_argument('-f', '--file', required=True, help='pbo file', metavar='PBO')
     parser_pbo.add_argument('--include', default='*', help='include filter pattern')
     parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
-    parser_pbo.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
+    pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
+    pbo_mode_group.add_argument('-c', '--create', action='store_true', default=False, help='create a new pbo file')
+    pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
+    parser_pbo.add_argument('files', help='files to be added', nargs='*', metavar='FILE')
     parser_pbo.set_defaults(func=_pbo)
     # create the parser for the "test" command
     parser_test = subparsers.add_parser('test')
