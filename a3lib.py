@@ -390,7 +390,6 @@ class PboFile:
         if verbose > 3:
             print("Reading PBO from file:")
         filedict = OrderedDict()
-        #self._modified = False
         if isinstance(file, str):
             filename = file
             fp = open(file, 'rb')
@@ -657,11 +656,15 @@ def bisign(args):
             print("Public key extracted")
 
 def _pbo(args):
-    pbo(args.file, args.include, args.exclude, create=args.create, extract=args.extract, list=args.list, files=args.files, header_extension=args.header_extension)
+    pbo(args.file, args.include, args.exclude, create_pbo=args.create,
+        extract_pbo=args.extract, info_pbo=args.info, list_pbo=args.list,
+        files=args.files, header_extension=args.header_extension)
 
-def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, files=[], header_extension=[]):
+def pbo(pbo, include="*", exclude="", create_pbo=False,
+        extract_pbo=False, info_pbo=False, list_pbo=False, files=[],
+        header_extension=[]):
     "create, list or extract pbo"
-    if create:
+    if create_pbo:
         dir = os.path.dirname(pbo)
         tmpfile = tempfile.mkstemp(dir=dir)
         os.close(tmpfile[0])
@@ -675,11 +678,11 @@ def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, f
         os.rename(tmpfile[1], pbo)
     else:
         with PboFile.from_file(pbo) as p:
-            if list:
+            if list_pbo:
                 for name in p.namelist():
                     if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
                         print(name.decode())
-            elif extract:
+            elif extract_pbo:
                 for info in p.infolist():
                     if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
                         with p.open(info) as src:
@@ -691,6 +694,12 @@ def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, f
                                 shutil.copyfileobj(src, dst)
                             if info.get_timestamp() > 0:
                                 os.utime(dst_name, (info.get_timestamp(), info.get_timestamp()))
+            elif info_pbo:
+                width = max(len(k) for k in p.header_extension.keys())
+                print('Header extensions:')
+                print(18*'-')
+                for k, v in p.header_extension.items():
+                    print('{:{width}}: {}'.format(k.decode(), v.decode(), width=width))
             else:
                 pass
     
@@ -752,6 +761,7 @@ def main():
     parser_pbo.add_argument('-e', '--header_extension', action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
     pbo_mode_group.add_argument('-c', '--create', action='store_true', default=False, help='create a new pbo file')
     pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
+    pbo_mode_group.add_argument('-i', '--info', action='store_true', default=False, help='print information about the pbo file')
     pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
     parser_pbo.add_argument('files', help='files to be added', nargs='*', metavar='FILE')
     parser_pbo.set_defaults(func=_pbo)
