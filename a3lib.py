@@ -495,7 +495,7 @@ class PboFile:
         "Return list of the PBO's members"
         return list(self.filedict.values())
 
-    def open(self, name, mode='r'):
+    def open(self, name, mode='rb'):
         "Open member as file-like object"
         if isinstance(name, PboInfo):
             pboinfo = name
@@ -657,15 +657,17 @@ def bisign(args):
             print("Public key extracted")
 
 def _pbo(args):
-    pbo(args.file, args.include, args.exclude, create=args.create, extract=args.extract, list=args.list, files=args.files)
+    pbo(args.file, args.include, args.exclude, create=args.create, extract=args.extract, list=args.list, files=args.files, header_extension=args.header_extension)
 
-def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, files=[]):
+def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, files=[], header_extension=[]):
     "create, list or extract pbo"
     if create:
         dir = os.path.dirname(pbo)
         tmpfile = tempfile.mkstemp(dir=dir)
         os.close(tmpfile[0])
         with PboFile() as p:
+            for k, v in header_extension:
+                p.header_extension[k.encode()] = v.encode()
             for f in files:
                 p.add(f, open(f, 'rb'))
             with open(tmpfile[1], 'wb') as t:
@@ -677,21 +679,20 @@ def pbo(pbo, include="*", exclude="", create=False, extract=False, list=False, f
                 for name in p.namelist():
                     if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
                         print(name.decode())
+            elif extract:
+                for info in p.infolist():
+                    if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
+                        with p.open(info) as src:
+                            dst_name = src.name.decode().replace('\\', os.path.sep)
+                            dir = os.path.dirname(dst_name)
+                            if not (os.path.exists(dir) or dir == ''):
+                                os.makedirs(dir)
+                            with open(dst_name, 'wb') as dst:
+                                shutil.copyfileobj(src, dst)
+                            if info.get_timestamp() > 0:
+                                os.utime(dst_name, (info.get_timestamp(), info.get_timestamp()))
             else:
-                if extract:
-                    for info in p.infolist():
-                        if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
-                            with p.open(info) as src:
-                                dst_name = src.name.decode().replace('\\', os.path.sep)
-                                dir = os.path.dirname(dst_name)
-                                if not (os.path.exists(dir) or dir == ''):
-                                    os.makedirs(dir)
-                                with open(dst_name, 'wb') as dst:
-                                    shutil.copyfileobj(src, dst)
-                                if info.get_timestamp() > 0:
-                                    os.utime(dst_name, (info.get_timestamp(), info.get_timestamp()))
-                else:
-                    pass
+                pass
     
 def _test(args):
     pass
@@ -743,14 +744,15 @@ def main():
     parser_bisign.add_argument('sig', help='bisign file')
     parser_bisign.set_defaults(func=bisign)
     # create the parser for the "pbo" command
-    parser_pbo = subparsers.add_parser('pbo', help='extract/list PBO files')
-    pbo_mode_group = parser_pbo.add_mutually_exclusive_group()
+    parser_pbo = subparsers.add_parser('pbo', help='create/extract/list PBO files')
+    pbo_mode_group = parser_pbo.add_mutually_exclusive_group(required=True)
     parser_pbo.add_argument('-f', '--file', required=True, help='pbo file', metavar='PBO')
     parser_pbo.add_argument('--include', default='*', help='include filter pattern')
     parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
-    pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
+    parser_pbo.add_argument('-e', '--header_extension', action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
     pbo_mode_group.add_argument('-c', '--create', action='store_true', default=False, help='create a new pbo file')
     pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
+    pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
     parser_pbo.add_argument('files', help='files to be added', nargs='*', metavar='FILE')
     parser_pbo.set_defaults(func=_pbo)
     # create the parser for the "test" command
