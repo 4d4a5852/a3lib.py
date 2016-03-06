@@ -657,12 +657,14 @@ def bisign(args):
 
 def _pbo(args):
     pbo(args.file, args.include, args.exclude, create_pbo=args.create,
-        extract_pbo=args.extract, info_pbo=args.info, list_pbo=args.list,
-        files=args.files, header_extension=args.header_extension)
+        extract_pbo=args.extract, info_pbo=args.info,
+        list_pbo=args.list, files=args.files,
+        header_extension=args.header_extension,
+        recursive=args.recursive)
 
 def pbo(pbo, include="*", exclude="", create_pbo=False,
         extract_pbo=False, info_pbo=False, list_pbo=False, files=[],
-        header_extension=[]):
+        header_extension=[], recursive=False):
     "create, list or extract pbo"
     if create_pbo:
         dir = os.path.dirname(pbo)
@@ -672,7 +674,10 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
             for k, v in header_extension:
                 p.header_extension[k.encode()] = v.encode()
             for f in files:
-                p.add(f, open(f, 'rb'))
+                if os.path.isfile(f):
+                    p.add(f, open(f, 'rb'))
+                elif recursive and os.path.isdir(f):
+                    files.extend([os.path.join(f,fn) for fn in os.listdir(f)])
             with open(tmpfile[1], 'wb') as t:
                 p.export(t)
         os.rename(tmpfile[1], pbo)
@@ -695,11 +700,12 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                             if info.get_timestamp() > 0:
                                 os.utime(dst_name, (info.get_timestamp(), info.get_timestamp()))
             elif info_pbo:
-                width = max(len(k) for k in p.header_extension.keys())
-                print('Header extensions:')
-                print(18*'-')
-                for k, v in p.header_extension.items():
-                    print('{:{width}}: {}'.format(k.decode(), v.decode(), width=width))
+                if len(p.header_extension) > 0:
+                    width = max(len(k) for k in p.header_extension.keys())
+                    print('Header extensions:')
+                    print(18*'-')
+                    for k, v in p.header_extension.items():
+                        print('{:{width}}: {}'.format(k.decode(), v.decode(), width=width))
             else:
                 pass
     
@@ -758,12 +764,13 @@ def main():
     parser_pbo.add_argument('-f', '--file', required=True, help='pbo file', metavar='PBO')
     parser_pbo.add_argument('--include', default='*', help='include filter pattern')
     parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
-    parser_pbo.add_argument('-e', '--header_extension', action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
+    parser_pbo.add_argument('-r', '--recursive', action='store_true', default=False, help='add files recursively')
+    parser_pbo.add_argument('-e', '--header_extension', default=[], action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
     pbo_mode_group.add_argument('-c', '--create', action='store_true', default=False, help='create a new pbo file')
     pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
     pbo_mode_group.add_argument('-i', '--info', action='store_true', default=False, help='print information about the pbo file')
     pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
-    parser_pbo.add_argument('files', help='files to be added', nargs='*', metavar='FILE')
+    parser_pbo.add_argument('files', default=[], help='files to be added', nargs='*', metavar='FILE')
     parser_pbo.set_defaults(func=_pbo)
     # create the parser for the "test" command
     parser_test = subparsers.add_parser('test')
