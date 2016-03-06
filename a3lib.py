@@ -685,7 +685,8 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                         with open(f, 'r') as fp:
                             p.header_extension[b'prefix'] = fp.readline().rstrip().encode()
                     else:
-                        p.add(f, open(f, 'rb'))
+                        if fnmatch.fnmatch(f.lower(), include.lower()) and not fnmatch.fnmatch(f.lower(), exclude.lower()):
+                            p.add(f, open(f, 'rb'))
                 elif recursion and os.path.isdir(f):
                     files.extend([os.path.join(f,fn) for fn in os.listdir(f)])
             for k, v in header_extension:
