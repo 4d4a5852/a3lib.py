@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 """
+Create, list and extract .pbo files.
 Create and verify .bisign files.
 Convert DER/PEM RSA keys to .biprivatekey/.bikey format.
 """
@@ -32,7 +33,8 @@ def unpack_asciiz(f):
 
 def padding(hash, tlen):
     "Add padding to the hash value and return as long"
-    return long('0x0001' + 'ff'*(tlen - len(hash)//2 - 3 - 15) + '00' + '3021300906052b0e03021a05000414' + hash, 16)
+    return long('0x0001' + 'ff'*(tlen - len(hash)//2 - 3 - 15) + '00'
+                + '3021300906052b0e03021a05000414' + hash, 16)
 
 def int_to_bytes(n, length, endian='little'):
     "Convert integer to tuple of bytes"
@@ -724,21 +726,6 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                         print('{:{width}}: {}'.format(k.decode(), v.decode(), width=width))
             else:
                 pass
-    
-def _test(args):
-    pass
-    if args.pubin:
-        key = PublicKey.from_file(args.file, args.keyform)
-    else:
-        key = PrivateKey.from_file(args.file, args.keyform)
-    key.dump()
-    key.export()
-    #with open(args.file, 'rb') as f:
-    #    s = f.read()
-    #print(_parse_DER(s)[0][1][0][1])
-    #key.export("blo.biprivatekey")
-    #bsign = Bisign.from_file(args.file)
-    #bsign.dump()
 
 def main():
     # create the parser
@@ -789,12 +776,6 @@ def main():
     parser_pbo.add_argument('--no-pboprefixfile', dest='pboprefixfile', action='store_false', default=True, help='don\'t use a $PBOPREFIX$ file')
     parser_pbo.add_argument('--no-recursion', dest='recursion', action='store_false', default=True, help='don\'t automatically ascend into directories when adding files')
     parser_pbo.set_defaults(func=_pbo)
-    # create the parser for the "test" command
-    parser_test = subparsers.add_parser('test')
-    parser_test.add_argument('file', help='file')
-    parser_test.add_argument('--keyform', default='bi', choices=['bi', 'der', 'pem'], help='Format of the key - default: bi')
-    parser_test.add_argument('--pubin', action='store_true', default=False, help='public key as input')
-    parser_test.set_defaults(func=_test)
 
     args = parser.parse_args()
     global verbose, quiet
