@@ -310,7 +310,7 @@ class PboInfo:
         if self.fp is None:
             return self.timestamp
         else:
-            return 0 #todo
+            return long(os.path.getmtime(self.fp.name))
 
     def check_name_hash(self):
         "Check whether name needs to be hashed"
@@ -427,26 +427,34 @@ class PboFile:
             self._export(file)
 
     def _export(self, file):
-        file.write(struct.pack('<sIIIII', *self.header))
+        hash1 = hashlib.sha1()
+        header = struct.pack('<sIIIII', *self.header)
         for k, v in self.header_extension.items():
-            file.write(struct.pack('{}ss{}ss'.format(len(k), len(v)), k, b'\0', v, b'\0'))
-        file.write(struct.pack('s', b'\0'))
+            header += struct.pack('{}ss{}ss'.format(len(k), len(v)), k, b'\0', v, b'\0')
+        header += struct.pack('s', b'\0')
         for k, v in sorted(self.filedict.items()):
-            file.write(struct.pack('<{}ssIIIII'.format(len(v.filename)), v.filename, b'\0', v.packing_method, v.original_size, v.reserved, v.get_timestamp(), v.get_data_size()))
-        file.write(struct.pack('<21s', b'\0'*21))
+            header += struct.pack('<{}ssIIIII'.format(len(v.filename)), v.filename, b'\0', v.packing_method, v.original_size, v.reserved, v.get_timestamp(), v.get_data_size())
+        header += struct.pack('<21s', b'\0'*21)
+        hash1.update(header)
+        file.write(header)
         for k, v in sorted(self.filedict.items()):
             with self.open(v) as f:
-                shutil.copyfileobj(f, file)
-        file.write(struct.pack('<21s', b'\0'*21))
-        file.seek(-20, 1)
-        #file.write(struct.pack('20B', *int_to_bytes(long(self.hash1(file).hexdigest(), 16), 20, 'big')))
+                data = f.read(CHUNK_SIZE)
+                while len(data) > 0:
+                    hash1.update(data)
+                    file.write(data)
+                    data = f.read(CHUNK_SIZE)
+        if(verbose > 3):
+            print(hash1.hexdigest())
+        file.write(struct.pack('<s20B', b'\0', *int_to_bytes(long(hash1.hexdigest(), 16), 20, 'big')))
 
     def add(self, name, file):
         "Add a file to the PBO"
-        if name.encode() in self.filedict:
-            raise KeyError("{0} exists in PBO".format(name))
+        dst_name = name.replace(os.path.sep, '\\')
+        if dst_name.encode() in self.filedict:
+            raise KeyError("{0} exists in PBO".format(dst_name))
         else:
-            self.filedict[name.encode()] = PboInfo(name.encode(), fp=file)
+            self.filedict[dst_name.encode()] = PboInfo(dst_name.encode(), fp=file)
 
     def delete(self, name):
         "Remove a file from the PBO"
@@ -761,16 +769,16 @@ def main():
     # create the parser for the "pbo" command
     parser_pbo = subparsers.add_parser('pbo', help='create/extract/list PBO files')
     pbo_mode_group = parser_pbo.add_mutually_exclusive_group(required=True)
-    parser_pbo.add_argument('-f', '--file', required=True, help='pbo file', metavar='PBO')
-    parser_pbo.add_argument('--include', default='*', help='include filter pattern')
-    parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
-    parser_pbo.add_argument('-r', '--recursive', action='store_true', default=False, help='add files recursively')
-    parser_pbo.add_argument('-e', '--header_extension', default=[], action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
     pbo_mode_group.add_argument('-c', '--create', action='store_true', default=False, help='create a new pbo file')
     pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
     pbo_mode_group.add_argument('-i', '--info', action='store_true', default=False, help='print information about the pbo file')
     pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
+    parser_pbo.add_argument('-f', '--file', required=True, help='pbo file', metavar='PBO')
     parser_pbo.add_argument('files', default=[], help='files to be added', nargs='*', metavar='FILE')
+    parser_pbo.add_argument('--include', default='*', help='include filter pattern')
+    parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
+    parser_pbo.add_argument('-r', '--recursive', action='store_true', default=False, help='add files recursively')
+    parser_pbo.add_argument('-e', '--header_extension', default=[], action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
     parser_pbo.set_defaults(func=_pbo)
     # create the parser for the "test" command
     parser_test = subparsers.add_parser('test')
