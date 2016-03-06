@@ -668,11 +668,11 @@ def _pbo(args):
         extract_pbo=args.extract, info_pbo=args.info,
         list_pbo=args.list, files=args.files,
         header_extension=args.header_extension,
-        recursive=args.recursive)
+        recursion=args.recursion, pboprefixfile=args.pboprefixfile)
 
 def pbo(pbo, include="*", exclude="", create_pbo=False,
         extract_pbo=False, info_pbo=False, list_pbo=False, files=[],
-        header_extension=[], recursive=False):
+        header_extension=[], recursion=True, pboprefixfile=True):
     "create, list or extract pbo"
     if create_pbo:
         dir = os.path.dirname(pbo)
@@ -681,12 +681,12 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
         with PboFile() as p:
             for f in files:
                 if os.path.isfile(f):
-                    if (f == '$PBOPREFIX$'):
+                    if pboprefixfile and (f == '$PBOPREFIX$'):
                         with open(f, 'r') as fp:
                             p.header_extension[b'prefix'] = fp.readline().rstrip().encode()
                     else:
                         p.add(f, open(f, 'rb'))
-                elif recursive and os.path.isdir(f):
+                elif recursion and os.path.isdir(f):
                     files.extend([os.path.join(f,fn) for fn in os.listdir(f)])
             for k, v in header_extension:
                 p.header_extension[k.encode()] = v.encode()
@@ -700,8 +700,9 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                     if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
                         print(name.decode())
             elif extract_pbo:
-                with open('$PBOPREFIX$', 'w') as f:
-                    f.write(p.header_extension[b'prefix'].decode())
+                if pboprefixfile and (b'prefix' in p.header_extension):
+                    with open('$PBOPREFIX$', 'w') as f:
+                        f.write(p.header_extension[b'prefix'].decode())
                 for info in p.infolist():
                     if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
                         with p.open(info) as src:
@@ -783,8 +784,9 @@ def main():
     parser_pbo.add_argument('files', default=[], help='files to be added', nargs='*', metavar='FILE')
     parser_pbo.add_argument('--include', default='*', help='include filter pattern')
     parser_pbo.add_argument('--exclude', default='', help='exclude filter pattern')
-    parser_pbo.add_argument('-r', '--recursive', action='store_true', default=False, help='add files recursively')
     parser_pbo.add_argument('-e', '--header_extension', default=[], action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
+    parser_pbo.add_argument('--no-pboprefixfile', dest='pboprefixfile', action='store_false', default=True, help='don\'t use a $PBOPREFIX$ file')
+    parser_pbo.add_argument('--no-recursion', dest='recursion', action='store_false', default=True, help='don\'t automatically ascend into directories when adding files')
     parser_pbo.set_defaults(func=_pbo)
     # create the parser for the "test" command
     parser_test = subparsers.add_parser('test')
