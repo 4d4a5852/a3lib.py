@@ -679,13 +679,17 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
         tmpfile = tempfile.mkstemp(dir=dir)
         os.close(tmpfile[0])
         with PboFile() as p:
-            for k, v in header_extension:
-                p.header_extension[k.encode()] = v.encode()
             for f in files:
                 if os.path.isfile(f):
-                    p.add(f, open(f, 'rb'))
+                    if (f == '$PBOPREFIX$'):
+                        with open(f, 'r') as fp:
+                            p.header_extension[b'prefix'] = fp.readline().rstrip().encode()
+                    else:
+                        p.add(f, open(f, 'rb'))
                 elif recursive and os.path.isdir(f):
                     files.extend([os.path.join(f,fn) for fn in os.listdir(f)])
+            for k, v in header_extension:
+                p.header_extension[k.encode()] = v.encode()
             with open(tmpfile[1], 'wb') as t:
                 p.export(t)
         os.rename(tmpfile[1], pbo)
@@ -696,6 +700,8 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                     if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
                         print(name.decode())
             elif extract_pbo:
+                with open('$PBOPREFIX$', 'w') as f:
+                    f.write(p.header_extension[b'prefix'].decode())
                 for info in p.infolist():
                     if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
                         with p.open(info) as src:
@@ -770,9 +776,9 @@ def main():
     parser_pbo = subparsers.add_parser('pbo', help='create/extract/list PBO files')
     pbo_mode_group = parser_pbo.add_mutually_exclusive_group(required=True)
     pbo_mode_group.add_argument('-c', '--create', action='store_true', default=False, help='create a new pbo file')
-    pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
     pbo_mode_group.add_argument('-i', '--info', action='store_true', default=False, help='print information about the pbo file')
     pbo_mode_group.add_argument('-l', '--list', action='store_true', default=False, help='list the content of the pbo file')
+    pbo_mode_group.add_argument('-x', '--extract', action='store_true', default=False, help='extract a pbo file')
     parser_pbo.add_argument('-f', '--file', required=True, help='pbo file', metavar='PBO')
     parser_pbo.add_argument('files', default=[], help='files to be added', nargs='*', metavar='FILE')
     parser_pbo.add_argument('--include', default='*', help='include filter pattern')
