@@ -398,7 +398,8 @@ class PboFile:
         else:
             fp = file
             filename = file.name
-        header = unpack_asciiz(fp), *struct.unpack('<IIIII', fp.read(20))
+        #header = unpack_asciiz(fp), *struct.unpack('<IIIII', fp.read(20))
+        header = (unpack_asciiz(fp),) + struct.unpack('<IIIII', fp.read(20))
         header_extension = OrderedDict()
         s = unpack_asciiz(fp)
         while len(s) != 0:
@@ -670,11 +671,13 @@ def _pbo(args):
         extract_pbo=args.extract, info_pbo=args.info,
         list_pbo=args.list, files=args.files,
         header_extension=args.header_extension,
-        recursion=args.recursion, pboprefixfile=args.pboprefixfile)
+        recursion=args.recursion, pboprefixfile=args.pboprefixfile,
+        update_timestamps=args.update_timestamps)
 
 def pbo(pbo, include="*", exclude="", create_pbo=False,
         extract_pbo=False, info_pbo=False, list_pbo=False, files=[],
-        header_extension=[], recursion=True, pboprefixfile=True):
+        header_extension=[], recursion=True, pboprefixfile=True,
+        update_timestamps=False):
     "create, list or extract pbo"
     if create_pbo:
         dir = os.path.dirname(pbo)
@@ -715,8 +718,13 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                                 os.makedirs(dir)
                             with open(dst_name, 'wb') as dst:
                                 shutil.copyfileobj(src, dst)
-                            if info.get_timestamp() > 0:
-                                os.utime(dst_name, (info.get_timestamp(), info.get_timestamp()))
+                            timestamp = info.get_timestamp()
+                            if update_timestamps and timestamp > 0:
+                                try:
+                                    os.utime(dst_name, (timestamp, timestamp))
+                                except OverflowError:
+                                    print("timestamp of {} out of range: {}"
+                                          .format(info.filename.decode(), timestamp))
             elif info_pbo:
                 if len(p.header_extension) > 0:
                     width = max(len(k) for k in p.header_extension.keys())
@@ -775,6 +783,7 @@ def main():
     parser_pbo.add_argument('-e', '--header_extension', default=[], action='append', help='header extension to be added', nargs=2, metavar=('NAME', 'VALUE'))
     parser_pbo.add_argument('--no-pboprefixfile', dest='pboprefixfile', action='store_false', default=True, help='don\'t use a $PBOPREFIX$ file')
     parser_pbo.add_argument('--no-recursion', dest='recursion', action='store_false', default=True, help='don\'t automatically ascend into directories when adding files')
+    parser_pbo.add_argument('--timestamps', dest='update_timestamps', action='store_true', default=False, help='update timestamps when extracting PBOs')
     parser_pbo.set_defaults(func=_pbo)
 
     args = parser.parse_args()
