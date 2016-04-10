@@ -104,9 +104,7 @@ def _parse_DER(der):
             r += (der[i:i+l], )
         i += l
     return r
-        
-        
-    
+
 class PublicKey:
     """RSA Public Key class"""
     def __init__(self, name=b'', bitlen=1024, public_exponent=0, modulus=0):
@@ -148,17 +146,17 @@ class PublicKey:
             raise ValueError("{} is not a supported form".format(form))
         return cls(name, bitlen, public_exponent, modulus)
 
-    def export(self, file=None, form='bi'):
+    def export(self, file=None):
         "Export PublicKey to a file"
         if file is None:
             file = '{}.bikey'.format(self.name.decode())
         if isinstance(file, str):
             with open(file, 'wb') as f:
-                self._export(f, form)
+                self._export(f)
         else:
-            self._export(file, form)
+            self._export(file)
 
-    def _export(self, file, form):
+    def _export(self, file):
         file.write(struct.pack('<{}ssIBB2xI4sII'.format(len(self.name)), self.name, b'\0', self.bitlen//8 + 20, 6, 2, 0x2400, b'RSA1', self.bitlen, self.public_exponent))
         file.write(struct.pack('{}B'.format(self.bitlen//8), *int_to_bytes(self.modulus, self.bitlen//8, 'little')))
 
@@ -171,9 +169,12 @@ class PublicKey:
 
 class PrivateKey:
     """RSA Private Key class"""
-    def __init__(self, public_key=PublicKey(), private_exponent=0, prime1=0, prime2=0, exponent1=0, exponent2=0, coefficient=0):
+    def __init__(self, public_key=None, private_exponent=0, prime1=0, prime2=0, exponent1=0, exponent2=0, coefficient=0):
         "Initialize PrivateKey"
-        self.public_key = public_key
+        if public_key is None:
+            self.public_key = PublicKey()
+        else:
+            self.public_key = public_key
         self.private_exponent = private_exponent
         self.prime1 = prime1
         self.prime2 = prime2
@@ -216,17 +217,17 @@ class PrivateKey:
             raise ValueError("{} is not a supported form".format(form))
         return cls(public_key, private_exponent, prime1, prime2, exponent1, exponent2, coefficient)
 
-    def export(self, file=None, form="bi"):
+    def export(self, file=None):
         "Export PublicKey to a file"
         if file is None:
             file = '{}.biprivatekey'.format(self.public_key.name.decode())
         if isinstance(file, str):
             with open(file, 'wb') as f:
-                self._export(f, form)
+                self._export(f)
         else:
-            self._export(file, form)
+            self._export(file)
 
-    def _export(self, file, form):
+    def _export(self, file):
         pkey = self.public_key
         bitlen = pkey.bitlen
         file.write(struct.pack('<{}ssIBB2xI4sII'.format(len(pkey.name)), pkey.name, b'\0', bitlen//16*9 + 20, 7, 2, 0x2400, b'RSA2', bitlen, pkey.public_exponent))
@@ -250,9 +251,11 @@ class PrivateKey:
 
 class Bisign:
     """Bisign class"""
-    def __init__(self, pkey=PublicKey(), sig1=0, sig2=0, sig3=0):
+    def __init__(self, pkey=None, sig1=0, sig2=0, sig3=0):
         "Initialize Bisign"
-        if isinstance(pkey, PrivateKey):
+        if pkey is None:
+            self.public_key = PublicKey()
+        elif isinstance(pkey, PrivateKey):
             self.public_key = pkey.public_key
         else:
             self.public_key = pkey
@@ -279,7 +282,7 @@ class Bisign:
         len3 = struct.unpack('<I', file.read(4))[0]
         sig3 = bytes_to_int(struct.unpack('{}B'.format(len3), file.read(len3)))
         return cls(public_key, sig1, sig2, sig3)
-        
+
     def export(self, file):
         "Export Bisign to a file"
         if isinstance(file, str):
@@ -356,7 +359,7 @@ class PboExtFile:
         pass
     def __enter__(self):
         return self
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exception_type, exception_value, traceback):
         self.close()
     def __del__(self):
         self.close()
@@ -395,10 +398,16 @@ class PboExtFile:
 
 class PboFile:
     """PBO file class"""
-    def __init__(self, header = (b'\0', 0x56657273, 0, 0, 0, 0), header_extension=OrderedDict(), filedict=OrderedDict(), filename=None, fp=None):
+    def __init__(self, header=(b'\0', 0x56657273, 0, 0, 0, 0), header_extension=None, filedict=None, filename=None, fp=None):
         self.header = header
-        self.header_extension = header_extension
-        self.filedict = filedict
+        if header_extension is None:
+            self.header_extension = OrderedDict()
+        else:
+            self.header_extension = header_extension
+        if filedict is None:
+            self.filedict = OrderedDict()
+        else:
+            self.filedict = filedict
         self.filename = filename
         self.fp = fp
 
@@ -463,7 +472,7 @@ class PboFile:
                     hash1.update(data)
                     file.write(data)
                     data = f.read(CHUNK_SIZE)
-        if(verbose > 3):
+        if verbose > 3:
             print(hash1.hexdigest())
         file.write(struct.pack('<s20B', b'\0', *int_to_bytes(long(hash1.hexdigest(), 16), 20, 'big')))
 
@@ -494,7 +503,7 @@ class PboFile:
 #            info.filename = new.encode()
 #            self.filedict[new.encode()]=info
 #            return info
-        
+
     def getinfo(self, name):
         "Select PboInfo for a member name "
         if name in self.filedict:
@@ -508,7 +517,7 @@ class PboFile:
             self.fp.close()
     def __enter__(self):
         return self
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exception_type, exception_value, traceback):
         self.close()
     def __del__(self):
         self.close()
@@ -541,7 +550,7 @@ class PboFile:
         return namehash
 
     def _filehash(self):
-        "Create hash from member data" 
+        "Create hash from member data"
         filehash = hashlib.sha1()
         nothing = True
         for i in self.infolist():
@@ -630,7 +639,7 @@ def sign(key, pbo, keyform='bi'):
 
 def _verify(args):
     verify(args.key, args.pbo, args.sig, args.keyform, args.privin)
-    
+
 def verify(key, pbo, sig, keyform='bi', privin=False):
     "Verify signature for public key & PBO"
     if privin:
@@ -655,16 +664,14 @@ def verify(key, pbo, sig, keyform='bi', privin=False):
         if not quiet:
             print("Signature verification failed")
         sys.exit(1)
-    
+
 def key(args):
     if args.pubin:
         pkey = PublicKey.from_file(args.key, args.keyform)
-        if not quiet:
-            pkey.dump()
     else:
         pkey = PrivateKey.from_file(args.key, args.keyform)
-        if not quiet:
-            pkey.dump()
+    if not quiet:
+        pkey.dump()
     if args.privout and not args.pubin:
         pkey.export()
     if args.pubin and args.pubout:
@@ -691,10 +698,14 @@ def _pbo(args):
         update_timestamps=args.update_timestamps)
 
 def pbo(pbo, include="*", exclude="", create_pbo=False,
-        extract_pbo=False, info_pbo=False, list_pbo=False, files=[],
-        header_extension=[], recursion=True, pboprefixfile=True,
+        extract_pbo=False, info_pbo=False, list_pbo=False, files=None,
+        header_extension=None, recursion=True, pboprefixfile=True,
         update_timestamps=False):
     "create, list or extract pbo"
+    if files is None:
+        files = []
+    if header_extension is None:
+        header_extension = []
     if create_pbo:
         dir = os.path.dirname(pbo)
         tmpfile = tempfile.mkstemp(dir=dir)
@@ -709,7 +720,7 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                         if fnmatch.fnmatch(f.lower(), include.lower()) and not fnmatch.fnmatch(f.lower(), exclude.lower()):
                             p.add(f, open(f, 'rb'))
                 elif recursion and os.path.isdir(f):
-                    files.extend([os.path.join(f,fn) for fn in os.listdir(f)])
+                    files.extend([os.path.join(f, fn) for fn in os.listdir(f)])
             for k, v in header_extension:
                 p.header_extension[k.encode()] = v.encode()
             with open(tmpfile[1], 'wb') as t:
