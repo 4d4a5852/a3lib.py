@@ -13,7 +13,6 @@ python3 tool library for Arma 3
 
 ## Usage ##
 ### Help ###
-check the help pages:
 
 ```
 $ a3lib.py --help
