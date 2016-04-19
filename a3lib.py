@@ -38,19 +38,19 @@ verbose = 0
 quiet = False
 CHUNK_SIZE = 4096
 
-def unpack_asciiz(f):
+def unpack_asciiz(file):
     "Unpack a null-terminated string from a file object"
-    s = b''
-    byte = f.read(1)
+    string = b''
+    byte = file.read(1)
     while byte != b'\0':
-        s += byte
-        byte = f.read(1)
-    return s
+        string += byte
+        byte = file.read(1)
+    return string
 
-def padding(hash, tlen):
+def padding(hash_value, tlen):
     "Add padding to the hash value and return as long"
-    return long('0x0001' + 'ff'*(tlen - len(hash)//2 - 3 - 15) + '00'
-                + '3021300906052b0e03021a05000414' + hash, 16)
+    return long('0x0001' + 'ff'*(tlen - len(hash_value)//2 - 3 - 15) + '00'
+                + '3021300906052b0e03021a05000414' + hash_value, 16)
 
 def int_to_bytes(n, length, endian='little'):
     "Convert integer to tuple of bytes"
@@ -127,7 +127,7 @@ class PublicKey:
     def _from_file(cls, file, form):
         if form == 'bi':
             name = unpack_asciiz(file)
-            len, type, version, alg = struct.unpack('<IBB2xI', file.read(12))
+            bikey_length, bikey_type, bikey_version, bikey_alg = struct.unpack('<IBB2xI', file.read(12))
             #ALG_ID: http://msdn.microsoft.com/en-us/library/windows/desktop/aa375549(v=vs.85).aspx
             magic = struct.unpack('4s', file.read(4))
             bitlen, public_exponent = struct.unpack('<II', file.read(4 + 4))
@@ -164,8 +164,8 @@ class PublicKey:
         "Dump public key values"
         print("Name            : {}".format(self.name.decode()))
         print("Bits            : {}".format(self.bitlen))
-        print("Modulus         : 0x{:x}".format(self.modulus))
-        print("Public Exponent : 0x{:x}".format(self.public_exponent))
+        print("Modulus         : {:#x}".format(self.modulus))
+        print("Public Exponent : {:#x}".format(self.public_exponent))
 
 class PrivateKey:
     """RSA Private Key class"""
@@ -242,12 +242,12 @@ class PrivateKey:
     def dump(self):
         "Dump private key values"
         self.public_key.dump()
-        print("Private Exponent: 0x{:x}".format(self.private_exponent))
-        print("Prime1          : 0x{:x}".format(self.prime1))
-        print("Prime2          : 0x{:x}".format(self.prime2))
-        print("Exponent1       : 0x{:x}".format(self.exponent1))
-        print("Exponent2       : 0x{:x}".format(self.exponent2))
-        print("Coefficient     : 0x{:x}".format(self.coefficient))
+        print("Private Exponent: {:#x}".format(self.private_exponent))
+        print("Prime1          : {:#x}".format(self.prime1))
+        print("Prime2          : {:#x}".format(self.prime2))
+        print("Exponent1       : {:#x}".format(self.exponent1))
+        print("Exponent2       : {:#x}".format(self.exponent2))
+        print("Coefficient     : {:#x}".format(self.coefficient))
 
 class Bisign:
     """Bisign class"""
@@ -302,9 +302,9 @@ class Bisign:
     def dump(self):
         "Dump Bisign to console"
         self.public_key.dump()
-        print("sig1            : 0x{:x}".format(self.sig1))
-        print("sig2            : 0x{:x}".format(self.sig2))
-        print("sig3            : 0x{:x}".format(self.sig3))
+        print("sig1            : {:#x}".format(self.sig1))
+        print("sig2            : {:#x}".format(self.sig2))
+        print("sig3            : {:#x}".format(self.sig3))
 
 class PboInfo:
     """PboInfo class"""
@@ -544,23 +544,23 @@ class PboFile:
     def _namehash(self):
         "Create hash from member names"
         namehash = hashlib.sha1()
-        for f in self.infolist():
-            if f.check_name_hash():
-                namehash.update(f.filename.lower())
+        for info in self.infolist():
+            if info.check_name_hash():
+                namehash.update(info.filename.lower())
         return namehash
 
     def _filehash(self):
         "Create hash from member data"
         filehash = hashlib.sha1()
         nothing = True
-        for i in self.infolist():
-            if i.check_file_hash():
+        for info in self.infolist():
+            if info.check_file_hash():
                 nothing = False
-                with self.open(i) as f:
-                    rlen = i.data_size
+                with self.open(info) as file:
+                    rlen = info.data_size
                     while rlen > 0:
-                        filehash.update(f.read(min(CHUNK_SIZE, rlen)))
-                        rlen = i.data_size - f.tell()
+                        filehash.update(file.read(min(CHUNK_SIZE, rlen)))
+                        rlen = info.data_size - file.tell()
         if nothing:
             filehash.update(b'nothing')
         return filehash
@@ -615,10 +615,10 @@ class PboFile:
 def _sign(args):
     sign(args.key, args.pbo, args.keyform)
 
-def sign(key, pbo, keyform='bi'):
+def sign(key_path, pbo_path, keyform='bi'):
     "Create signature file for private key & PBO"
-    pkey = PrivateKey.from_file(key, keyform)
-    with PboFile.from_file(pbo) as p:
+    pkey = PrivateKey.from_file(key_path, keyform)
+    with PboFile.from_file(pbo_path) as p:
         hash1, hash2, hash3 = p.hash()
     if verbose > 1:
         print("hash1: 0x" + hash1.hexdigest())
@@ -632,7 +632,7 @@ def sign(key, pbo, keyform='bi'):
         print("sig1: {:x}".format(sig1))
         print("sig2: {:x}".format(sig2))
         print("sig3: {:x}".format(sig3))
-    bsign.export('{:s}.{:s}.bisign'.format(os.path.basename(pbo), pkey.public_key.name.decode()))
+    bsign.export('{:s}.{:s}.bisign'.format(os.path.basename(pbo_path), pkey.public_key.name.decode()))
     if not quiet:
         print("Signature created")
     sys.exit(0)
@@ -640,15 +640,15 @@ def sign(key, pbo, keyform='bi'):
 def _verify(args):
     verify(args.key, args.pbo, args.sig, args.keyform, args.privin)
 
-def verify(key, pbo, sig, keyform='bi', privin=False):
+def verify(key_path, pbo_path, sig_path, keyform='bi', privin=False):
     "Verify signature for public key & PBO"
     if privin:
-        pkey = PrivateKey.from_file(key, keyform).public_key
+        pkey = PrivateKey.from_file(key_path, keyform).public_key
     else:
-        pkey = PublicKey.from_file(key, keyform)
-    with PboFile.from_file(pbo) as p:
+        pkey = PublicKey.from_file(key_path, keyform)
+    with PboFile.from_file(pbo_path) as p:
         hash1, hash2, hash3 = p.hash()
-    bsign = Bisign.from_file(sig)
+    bsign = Bisign.from_file(sig_path)
     verify1 = (padding(hash1.hexdigest(), pkey.bitlen//8)) == (pow(bsign.sig1, pkey.public_exponent, pkey.modulus))
     verify2 = (padding(hash2.hexdigest(), pkey.bitlen//8)) == (pow(bsign.sig2, pkey.public_exponent, pkey.modulus))
     verify3 = (padding(hash3.hexdigest(), pkey.bitlen//8)) == (pow(bsign.sig3, pkey.public_exponent, pkey.modulus))
@@ -697,7 +697,7 @@ def _pbo(args):
         recursion=args.recursion, pboprefixfile=args.pboprefixfile,
         update_timestamps=args.update_timestamps)
 
-def pbo(pbo, include="*", exclude="", create_pbo=False,
+def pbo(pbo_path, include="*", exclude="", create_pbo=False,
         extract_pbo=False, info_pbo=False, list_pbo=False, files=None,
         header_extension=None, recursion=True, pboprefixfile=True,
         update_timestamps=False):
@@ -707,8 +707,8 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
     if header_extension is None:
         header_extension = []
     if create_pbo:
-        dir = os.path.dirname(pbo)
-        tmpfile = tempfile.mkstemp(dir=dir)
+        pbo_dir = os.path.dirname(pbo_path)
+        tmpfile = tempfile.mkstemp(dir=pbo_dir)
         os.close(tmpfile[0])
         with PboFile() as p:
             for f in files:
@@ -725,9 +725,9 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                 p.header_extension[k.encode()] = v.encode()
             with open(tmpfile[1], 'wb') as t:
                 p.export(t)
-        os.rename(tmpfile[1], pbo)
+        os.rename(tmpfile[1], pbo_path)
     else:
-        with PboFile.from_file(pbo) as p:
+        with PboFile.from_file(pbo_path) as p:
             if list_pbo:
                 for name in p.namelist():
                     if fnmatch.fnmatch(name.decode().lower(), include.lower()) and not fnmatch.fnmatch(name.decode().lower(), exclude.lower()):
@@ -740,9 +740,9 @@ def pbo(pbo, include="*", exclude="", create_pbo=False,
                     if fnmatch.fnmatch(info.filename.decode().lower(), include.lower()) and not fnmatch.fnmatch(info.filename.decode().lower(), exclude.lower()):
                         with p.open(info) as src:
                             dst_name = src.name.decode().replace('\\', os.path.sep)
-                            dir = os.path.dirname(dst_name)
-                            if not (os.path.exists(dir) or dir == ''):
-                                os.makedirs(dir)
+                            dst_dir = os.path.dirname(dst_name)
+                            if not (os.path.exists(dst_dir) or dst_dir == ''):
+                                os.makedirs(dst_dir)
                             with open(dst_name, 'wb') as dst:
                                 shutil.copyfileobj(src, dst)
                             timestamp = info.get_timestamp()
