@@ -39,7 +39,7 @@ quiet = False
 CHUNK_SIZE = 4096
 
 def unpack_asciiz(file):
-    "Unpack a null-terminated string from a file object"
+    """Unpack a null-terminated string from file object."""
     string = b''
     byte = file.read(1)
     while byte != b'\0':
@@ -48,12 +48,12 @@ def unpack_asciiz(file):
     return string
 
 def padding(hash_value, tlen):
-    "Add padding to the hash value and return as long"
+    """Add padding to the hash value and return as long."""
     return long('0x0001' + 'ff'*(tlen - len(hash_value)//2 - 3 - 15) + '00'
                 + '3021300906052b0e03021a05000414' + hash_value, 16)
 
 def int_to_bytes(n, length, endian='little'):
-    "Convert integer to tuple of bytes"
+    """Convert integer to tuple of bytes."""
     if sys.version > '3':
         return n.to_bytes(length, endian)
     else:
@@ -66,7 +66,7 @@ def int_to_bytes(n, length, endian='little'):
         return tuple(b)
 
 def bytes_to_int(b, endian='little'):
-    "Convert tuple of bytes to integer"
+    """Convert tuple of bytes to integer."""
     if sys.version > '3':
         return int.from_bytes(b, endian)
     else:
@@ -78,7 +78,10 @@ def bytes_to_int(b, endian='little'):
         return long(s, 16)
 
 def _parse_DER(der):
-    "Parse a string containing DER encoded ASN.1 data - return tuple of tuples, integers, strings"
+    """Parse a string containing DER encoded ASN.1 data
+
+    return tuple of tuples, integers, strings.
+    """
     i = 0
     r = ()
     while i < len(der):
@@ -107,8 +110,9 @@ def _parse_DER(der):
 
 class PublicKey:
     """RSA Public Key class"""
+
     def __init__(self, name=b'', bitlen=1024, public_exponent=0, modulus=0):
-        "Initialize PublicKey"
+        """Initialize PublicKey."""
         self.name = name
         self.bitlen = bitlen
         self.public_exponent = public_exponent
@@ -116,7 +120,7 @@ class PublicKey:
 
     @classmethod
     def from_file(cls, file, form='bi'):
-        "Initialize PublicKey from a file"
+        """Initialize PublicKey from file."""
         if isinstance(file, str):
             with open(file, 'rb') as f:
                 return cls._from_file(f, form)
@@ -147,7 +151,7 @@ class PublicKey:
         return cls(name, bitlen, public_exponent, modulus)
 
     def export(self, file=None):
-        "Export PublicKey to a file"
+        """Export PublicKey to file."""
         if file is None:
             file = '{}.bikey'.format(self.name.decode())
         if isinstance(file, str):
@@ -161,7 +165,7 @@ class PublicKey:
         file.write(struct.pack('{}B'.format(self.bitlen//8), *int_to_bytes(self.modulus, self.bitlen//8, 'little')))
 
     def dump(self):
-        "Dump public key values"
+        """Dump PublicKey values to console."""
         print("Name            : {}".format(self.name.decode()))
         print("Bits            : {}".format(self.bitlen))
         print("Modulus         : {:#x}".format(self.modulus))
@@ -169,8 +173,9 @@ class PublicKey:
 
 class PrivateKey:
     """RSA Private Key class"""
+
     def __init__(self, public_key=None, private_exponent=0, prime1=0, prime2=0, exponent1=0, exponent2=0, coefficient=0):
-        "Initialize PrivateKey"
+        """Initialize PrivateKey."""
         if public_key is None:
             self.public_key = PublicKey()
         else:
@@ -184,7 +189,7 @@ class PrivateKey:
 
     @classmethod
     def from_file(cls, file, form="bi"):
-        "Initialize PrivateKey from a file"
+        """Initialize PrivateKey from file."""
         if isinstance(file, str):
             with open(file, 'rb') as f:
                 return cls._from_file(f, form)
@@ -218,7 +223,7 @@ class PrivateKey:
         return cls(public_key, private_exponent, prime1, prime2, exponent1, exponent2, coefficient)
 
     def export(self, file=None):
-        "Export PublicKey to a file"
+        """Export PublicKey to file."""
         if file is None:
             file = '{}.biprivatekey'.format(self.public_key.name.decode())
         if isinstance(file, str):
@@ -240,7 +245,7 @@ class PrivateKey:
         file.write(struct.pack('{}B'.format(bitlen//8), *int_to_bytes(self.private_exponent, bitlen//8, 'little')))
 
     def dump(self):
-        "Dump private key values"
+        """Dump PrivateKey values to console."""
         self.public_key.dump()
         print("Private Exponent: {:#x}".format(self.private_exponent))
         print("Prime1          : {:#x}".format(self.prime1))
@@ -251,8 +256,9 @@ class PrivateKey:
 
 class Bisign:
     """Bisign class"""
+
     def __init__(self, pkey=None, sig1=0, sig2=0, sig3=0):
-        "Initialize Bisign"
+        """Initialize Bisign."""
         if pkey is None:
             self.public_key = PublicKey()
         elif isinstance(pkey, PrivateKey):
@@ -265,7 +271,7 @@ class Bisign:
 
     @classmethod
     def from_file(cls, file):
-        "Initialize Bisign from a file"
+        """Initialize Bisign from file."""
         if isinstance(file, str):
             with open(file, 'rb') as f:
                 return cls._from_file(f)
@@ -284,7 +290,7 @@ class Bisign:
         return cls(public_key, sig1, sig2, sig3)
 
     def export(self, file):
-        "Export Bisign to a file"
+        """Export Bisign to file."""
         if isinstance(file, str):
             with open(file, 'wb') as f:
                 self._export(f)
@@ -300,7 +306,7 @@ class Bisign:
         file.write(struct.pack('<I{}B'.format(len123), len123, *int_to_bytes(self.sig3, len123, 'little')))
 
     def dump(self):
-        "Dump Bisign to console"
+        """Dump Bisign values to console."""
         self.public_key.dump()
         print("sig1            : {:#x}".format(self.sig1))
         print("sig2            : {:#x}".format(self.sig2))
@@ -308,8 +314,9 @@ class Bisign:
 
 class PboInfo:
     """PboInfo class"""
+
     def __init__(self, filename, packing_method=0, original_size=0, reserved=0, timestamp=0, data_size=-1, fp=None):
-        "Initialize PboInfo"
+        """Initialize PboInfo."""
         self.filename = filename
         self.packing_method = packing_method
         self.original_size = original_size
@@ -320,42 +327,44 @@ class PboInfo:
         self.data_offset = -1
 
     def get_data_size(self):
-        "Get the file size of the member"
+        """Get the file size of the member."""
         if self.fp is None:
             return self.data_size
         else:
             return os.fstat(self.fp.fileno()).st_size
 
     def get_timestamp(self):
-        "Get the timestamp of the member"
+        """Get the timestamp of the member."""
         if self.fp is None:
             return self.timestamp
         else:
             return long(os.path.getmtime(self.fp.name))
 
     def check_name_hash(self):
-        "Check whether name needs to be hashed"
+        """Check whether member name needs to be hashed."""
         return self.get_data_size() > 0
 
     def check_file_hash(self):
-        "Check whether file needs to be hashed"
+        """Check whether member file needs to be hashed."""
         return self.get_data_size() > 0 and self.filename.split(b'.')[-1].lower() not in [b'paa', b'jpg', b'p3d', b'tga', b'rvmat', b'lip', b'ogg', b'wss', b'png', b'rtm', b'pac', b'fxy', b'wrp']
 
     def dump(self):
-        "Dump PboInfo to console"
+        """Dump PboInfo to console."""
         print(self.filename + "{0} Bytes @ {1:x}".format(self.get_data_size(), self.data_offset))
 
 
 class PboExtFile:
     """file object-like class"""
+
     def __init__(self, fileobj, pboinfo, mode):
-        "Initialize PboExtFile"
+        """Initialize PboExtFile."""
         self.name = pboinfo.filename
         self.fp = fileobj
         self.info = pboinfo
         self.pos = pboinfo.data_offset
 
     def close(self):
+        """Close file."""
         pass
     def __enter__(self):
         return self
@@ -365,7 +374,7 @@ class PboExtFile:
         self.close()
 
     def read(self, n=-1):
-        "Read from PboExtFile"
+        """Read from PboExtFile."""
         self.fp.seek(self.pos)
         data = b''
         read_size = self.info.data_offset + self.info.data_size - self.pos
@@ -373,12 +382,11 @@ class PboExtFile:
             read_size = min(n, read_size)
         if read_size > 0:
             data = self.fp.read(read_size)
-        #print("read @ {0:x}: 0x{1}".format(self.pos, data.encode('hex_codec')))
         self.pos = self.fp.tell()
         return data
 
     def seek(self, offset, whence=0):
-        "Seek in PboExtFile"
+        """Seek in PboExtFile."""
         if whence == 0:
             offset += self.info.data_offset
         elif whence == 1:
@@ -393,12 +401,14 @@ class PboExtFile:
         self.pos = self.fp.tell()
 
     def tell(self):
-        "Tell within PboExtFile"
+        """Tell within PboExtFile."""
         return self.pos - self.info.data_offset
 
 class PboFile:
     """PBO file class"""
+
     def __init__(self, header=(b'\0', 0x56657273, 0, 0, 0, 0), header_extension=None, filedict=None, filename=None, fp=None):
+        """Initialize PboFile."""
         self.header = header
         if header_extension is None:
             self.header_extension = OrderedDict()
@@ -413,7 +423,7 @@ class PboFile:
 
     @classmethod
     def from_file(cls, file):
-        "Initialize PboFile from file"
+        """Initialize PboFile from file."""
         if verbose > 3:
             print("Reading PBO from file:")
         filedict = OrderedDict()
@@ -447,7 +457,7 @@ class PboFile:
         return cls(header, header_extension, filedict, filename=filename, fp=fp)
 
     def export(self, file):
-        "Export PBO to a file"
+        """Export PboFile to file."""
         if isinstance(file, str):
             with open(file, 'wb') as f:
                 self._export(f)
@@ -477,7 +487,7 @@ class PboFile:
         file.write(struct.pack('<s20B', b'\0', *int_to_bytes(long(hash1.hexdigest(), 16), 20, 'big')))
 
     def add(self, name, file):
-        "Add a file to the PBO"
+        """Add a file to the PboFile."""
         dst_name = name.replace(os.path.sep, '\\')
         if dst_name.encode() in self.filedict:
             raise KeyError("{0} exists in PBO".format(dst_name))
@@ -485,14 +495,14 @@ class PboFile:
             self.filedict[dst_name.encode()] = PboInfo(dst_name.encode(), fp=file)
 
     def delete(self, name):
-        "Remove a file from the PBO"
+        """Remove a file from the PboFile."""
         if isinstance(name, str):
             return self.filedict.pop(name)
         else:
             return self.filedict.pop(name.filename)
 
 #    def rename(self, old, new):
-#        "Rename a file in the PBO"
+#        """Rename a file in the PboFile."""
 #        if isinstance(old, str):
 #            info = self.filedict.pop(old.encode())
 #        else:
@@ -505,14 +515,14 @@ class PboFile:
 #            return info
 
     def getinfo(self, name):
-        "Select PboInfo for a member name "
+        """Get PboInfo by member name."""
         if name in self.filedict:
             return self.filedict[name]
         else:
             raise KeyError("{0} not found in PBO".format(name))
 
     def close(self):
-        "Close the file handle"
+        """Close the file handle."""
         if self.fp is not None:
             self.fp.close()
     def __enter__(self):
@@ -523,15 +533,15 @@ class PboFile:
         self.close()
 
     def namelist(self):
-        "Return list of the PBO's member names"
+        """Return member names as list of strings."""
         return list(self.filedict.keys())
 
     def infolist(self):
-        "Return list of the PBO's members"
+        """Return members as list of PboInfos."""
         return list(self.filedict.values())
 
     def open(self, name, mode='rb'):
-        "Open member as file-like object"
+        """Open member as file-like object."""
         if isinstance(name, PboInfo):
             pboinfo = name
         else:
@@ -542,7 +552,7 @@ class PboFile:
             return pboinfo.fp
 
     def _namehash(self):
-        "Create hash from member names"
+        """Create hash from member names."""
         namehash = hashlib.sha1()
         for info in self.infolist():
             if info.check_name_hash():
@@ -550,7 +560,7 @@ class PboFile:
         return namehash
 
     def _filehash(self):
-        "Create hash from member data"
+        """Create hash from member data."""
         filehash = hashlib.sha1()
         nothing = True
         for info in self.infolist():
@@ -566,7 +576,7 @@ class PboFile:
         return filehash
 
     def hash1(self, file=None):
-        "Calculate first hash value"
+        """Calculate first hash value."""
         if verbose > 3:
             print("Calculating hash1:")
         if file is None:
@@ -586,7 +596,7 @@ class PboFile:
         return hash1
 
     def hash(self, file=None):
-        "Calculate the 3 hash values"
+        """Calculate all 3 hash values."""
         if file is None:
             file = self.fp
         hash1 = self.hash1(file)
@@ -616,7 +626,7 @@ def _sign(args):
     sign(args.key, args.pbo, args.keyform)
 
 def sign(key_path, pbo_path, keyform='bi'):
-    "Create signature file for private key & PBO"
+    """Create signature file for private key & PBO."""
     pkey = PrivateKey.from_file(key_path, keyform)
     with PboFile.from_file(pbo_path) as p:
         hash1, hash2, hash3 = p.hash()
@@ -641,7 +651,7 @@ def _verify(args):
     verify(args.key, args.pbo, args.sig, args.keyform, args.privin)
 
 def verify(key_path, pbo_path, sig_path, keyform='bi', privin=False):
-    "Verify signature for public key & PBO"
+    """Verify signature for public key & PBO."""
     if privin:
         pkey = PrivateKey.from_file(key_path, keyform).public_key
     else:
@@ -666,6 +676,7 @@ def verify(key_path, pbo_path, sig_path, keyform='bi', privin=False):
         sys.exit(1)
 
 def key(args):
+    """Dump public or private key info to console."""
     if args.pubin:
         pkey = PublicKey.from_file(args.key, args.keyform)
     else:
@@ -680,7 +691,7 @@ def key(args):
         pkey.public_key.export()
 
 def bisign(args):
-    "Dump bisign or extract its public key"
+    """Dump bisign or extract its public key."""
     bsign = Bisign.from_file(args.sig)
     if not quiet:
         bsign.dump()
@@ -701,7 +712,7 @@ def pbo(pbo_path, include="*", exclude="", create_pbo=False,
         extract_pbo=False, info_pbo=False, list_pbo=False, files=None,
         header_extension=None, recursion=True, pboprefixfile=True,
         update_timestamps=False):
-    "create, list or extract pbo"
+    """Create, list or extract PBO."""
     if files is None:
         files = []
     if header_extension is None:
@@ -763,6 +774,7 @@ def pbo(pbo_path, include="*", exclude="", create_pbo=False,
                 pass
 
 def main():
+    """Create parser and parse cmdline arguments."""
     # create the parser
     parser = argparse.ArgumentParser(description='Work with BI PBOs, signatures and keys.')
     group = parser.add_mutually_exclusive_group()
