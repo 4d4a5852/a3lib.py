@@ -228,16 +228,23 @@ class PrivateKey:
             if form == 'der':
                 b = file.read()
             else:
-                b = base64.b64decode(b''.join(file.readlines()[1:-1]))
-            d = _parse_DER(b)
-            modulus = d[0][1]
-            public_exponent = d[0][2]
+                pem_type = file.readline().strip()
+                tmp = base64.b64decode(b''.join(file.readlines()[:-1]))
+                if pem_type == b"-----BEGIN PRIVATE KEY-----":
+                    b = _parse_DER(tmp)[0][2]
+                elif pem_type == b"-----BEGIN RSA PRIVATE KEY-----":
+                    b = tmp
+                else:
+                    raise ValueError("unknown PEM format")
+            der = _parse_DER(b)
+            modulus = der[0][1]
+            public_exponent = der[0][2]
             bitlen = modulus.bit_length()
             public_key = PublicKey(
                 os.path.basename(file.name).split('.')[0].encode(), bitlen,
                 public_exponent, modulus)
             (private_exponent, prime1, prime2, exponent1, exponent2,
-             coefficient) = d[0][3:9]
+             coefficient) = der[0][3:9]
         else:
             raise ValueError("{} is not a supported form".format(form))
         return cls(public_key, private_exponent, prime1, prime2, exponent1,
