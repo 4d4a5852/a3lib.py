@@ -134,11 +134,18 @@ optional arguments:
 * create PBO and add config.cpp and folder abc:  
     `a3lib.py pbo -cf test.pbo config.cpp abc`
 
+* create new private key and convert to bi format:  
+    `openssl genpkey -algorithm rsa -outform der -out mytestkey.der`  
+    `a3lib.py key --keyform der mytestkey.der --privout --pubout`
+
 * sign PBO:  
-    `a3lib.py sign test.pbo xyz.biprivatekey`
+    `a3lib.py sign mytestkey.biprivatekey test.pbo`
+
+* sign PBO with key in DER format:  
+    `a3lib.py sign --keyform der mytestkey.der test.pbo`
 
 * verify signature:  
-    `a3lib.py verify xyz.bikey test.pbo test.pbo.xyz.bisign`
+    `a3lib.py verify mytestkey.bikey test.pbo test.pbo.mytestkey.bisign`
 
 ### Class Documentation ###
 
