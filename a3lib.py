@@ -251,7 +251,7 @@ class PrivateKey:
                    exponent2, coefficient)
 
     def export(self, file=None):
-        """Export PublicKey to file."""
+        """Export PrivateKey to file."""
         if file is None:
             file = '{}.biprivatekey'.format(self.public_key.name.decode())
         if isinstance(file, str):
