@@ -618,7 +618,7 @@ class PboFile:
     def _namehash(self):
         """Create hash from member names."""
         namehash = hashlib.sha1()
-        for info in self.infolist():
+        for info in sorted(self.infolist(), key=lambda v: v.filename.lower()):
             if info.check_name_hash():
                 namehash.update(info.filename.lower())
         return namehash
