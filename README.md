@@ -53,7 +53,7 @@ optional arguments:
 ```
 ```
 $ a3lib.py sign --help
-usage: a3lib.py sign [-h] [--keyform {bi,der,pem}] key pbo
+usage: a3lib.py sign [-h] [--keyform {bi,der,pem}] [--version {2,3}] key pbo
 
 positional arguments:
   key                   private key
@@ -63,6 +63,7 @@ optional arguments:
   -h, --help            show this help message and exit
   --keyform {bi,der,pem}
                         format of the key - default: bi
+  --version {2,3}       signature version - default: 3
 ```
 ```
 $ a3lib.py bisign --help
