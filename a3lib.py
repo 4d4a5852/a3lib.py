@@ -301,7 +301,7 @@ class PrivateKey:
 class Bisign:
     """Bisign class"""
 
-    def __init__(self, pkey=None, sig1=0, sig2=0, sig3=0):
+    def __init__(self, pkey=None, sig1=0, sig2=0, sig3=0, version=3):
         """Initialize Bisign."""
         if pkey is None:
             self.public_key = PublicKey()
@@ -309,6 +309,7 @@ class Bisign:
             self.public_key = pkey.public_key
         else:
             self.public_key = pkey
+        self.version = version
         self.sig1 = sig1
         self.sig2 = sig2
         self.sig3 = sig3
@@ -327,11 +328,11 @@ class Bisign:
         public_key = PublicKey.from_file(file)
         len1 = struct.unpack('<I', file.read(4))[0]
         sig1 = bytes_to_int(struct.unpack('{}B'.format(len1), file.read(len1)))
-        unknown, len2 = struct.unpack('<II', file.read(8))
+        version, len2 = struct.unpack('<II', file.read(8))
         sig2 = bytes_to_int(struct.unpack('{}B'.format(len2), file.read(len2)))
         len3 = struct.unpack('<I', file.read(4))[0]
         sig3 = bytes_to_int(struct.unpack('{}B'.format(len3), file.read(len3)))
-        return cls(public_key, sig1, sig2, sig3)
+        return cls(public_key, sig1, sig2, sig3, version)
 
     def export(self, file):
         """Export Bisign to file."""
@@ -346,7 +347,7 @@ class Bisign:
         len123 = self.public_key.bitlen//8
         file.write(struct.pack('<I{}B'.format(len123), len123,
                                *int_to_bytes(self.sig1, len123, 'little')))
-        file.write(struct.pack('<I', 0x2))
+        file.write(struct.pack('<I', self.version))
         file.write(struct.pack('<I{}B'.format(len123), len123,
                                *int_to_bytes(self.sig2, len123, 'little')))
         file.write(struct.pack('<I{}B'.format(len123), len123,
@@ -355,6 +356,7 @@ class Bisign:
     def dump(self):
         """Dump Bisign values to console."""
         self.public_key.dump()
+        print("version         : {}".format(self.version))
         print("sig1            : {:#x}".format(self.sig1))
         print("sig2            : {:#x}".format(self.sig2))
         print("sig3            : {:#x}".format(self.sig3))
@@ -392,16 +394,20 @@ class PboInfo:
         """Check whether member name needs to be hashed."""
         return self.get_data_size() > 0
 
-    def check_file_hash(self):
+    def check_file_hash(self, version):
         """Check whether member file needs to be hashed."""
-        return (self.get_data_size() > 0 and
-                self.filename.split(b'.')[-1].lower() not in [b'paa', b'jpg',
-                                                              b'p3d', b'tga',
-                                                              b'rvmat', b'lip',
-                                                              b'ogg', b'wss',
-                                                              b'png', b'rtm',
-                                                              b'pac', b'fxy',
-                                                              b'wrp'])
+        if version == 2:
+            return (self.get_data_size() > 0 and
+                    self.filename.split(b'.')[-1].lower() not in [
+                        b'paa', b'jpg', b'p3d', b'tga', b'rvmat', b'lip',
+                        b'ogg', b'wss', b'png', b'rtm', b'pac', b'fxy', b'wrp'])
+        elif version == 3:
+            return (self.get_data_size() > 0 and
+                    self.filename.split(b'.')[-1].lower() in [
+                        b'sqf', b'inc', b'bikb', b'ext', b'fsm', b'sqm', b'hpp',
+                        b'cfg', b'sqs', b'h'])
+        else:
+            raise ValueError("Unknown signature version {}".format(version))
 
     def dump(self):
         """Dump PboInfo to console."""
@@ -623,12 +629,12 @@ class PboFile:
                 namehash.update(info.filename.lower())
         return namehash
 
-    def _filehash(self):
+    def _filehash(self, version):
         """Create hash from member data."""
         filehash = hashlib.sha1()
         nothing = True
         for info in self.infolist():
-            if info.check_file_hash():
+            if info.check_file_hash(version):
                 nothing = False
                 with self.open(info) as file:
                     rlen = info.data_size
@@ -636,7 +642,12 @@ class PboFile:
                         filehash.update(file.read(min(CHUNK_SIZE, rlen)))
                         rlen = info.data_size - file.tell()
         if nothing:
-            filehash.update(b'nothing')
+            if version == 2:
+                filehash.update(b'nothing')
+            elif version == 3:
+                filehash.update(b'gnihton')
+            else:
+                raise ValueError("Unknown signature version {}".format(version))
         return filehash
 
     def hash1(self, file=None):
@@ -659,7 +670,7 @@ class PboFile:
             print(hash1.hexdigest())
         return hash1
 
-    def hash(self, file=None):
+    def hash(self, file=None, version=3):
         """Calculate all 3 hash values."""
         if file is None:
             file = self.fp
@@ -674,7 +685,7 @@ class PboFile:
             hash2.update(self.header_extension[b'prefix'] + b'\\')
         if verbose > 3:
             print(hash2.hexdigest())
-        filehash = self._filehash()
+        filehash = self._filehash(version)
         if verbose > 3:
             print("Calculating hash3:")
         hash3 = hashlib.sha1()
@@ -687,13 +698,13 @@ class PboFile:
         return hash1, hash2, hash3
 
 def _sign(args):
-    sign(args.key, args.pbo, args.keyform)
+    sign(args.key, args.pbo, args.keyform, args.version)
 
-def sign(key_path, pbo_path, keyform='bi'):
+def sign(key_path, pbo_path, keyform='bi', version=3):
     """Create signature file for private key & PBO."""
     pkey = PrivateKey.from_file(key_path, keyform)
     with PboFile.from_file(pbo_path) as p:
-        hash1, hash2, hash3 = p.hash()
+        hash1, hash2, hash3 = p.hash(None, version)
     if verbose > 1:
         print("hash1: 0x" + hash1.hexdigest())
         print("hash2: 0x" + hash2.hexdigest())
@@ -704,7 +715,7 @@ def sign(key_path, pbo_path, keyform='bi'):
                pkey.private_exponent, pkey.public_key.modulus)
     sig3 = pow(padding(hash3.hexdigest(), pkey.public_key.bitlen//8),
                pkey.private_exponent, pkey.public_key.modulus)
-    bsign = Bisign(pkey, sig1, sig2, sig3)
+    bsign = Bisign(pkey, sig1, sig2, sig3, version)
     if verbose > 0:
         print("sig1: {:x}".format(sig1))
         print("sig2: {:x}".format(sig2))
@@ -724,9 +735,9 @@ def verify(key_path, pbo_path, sig_path, keyform='bi', privin=False):
         pkey = PrivateKey.from_file(key_path, keyform).public_key
     else:
         pkey = PublicKey.from_file(key_path, keyform)
-    with PboFile.from_file(pbo_path) as p:
-        hash1, hash2, hash3 = p.hash()
     bsign = Bisign.from_file(sig_path)
+    with PboFile.from_file(pbo_path) as p:
+        hash1, hash2, hash3 = p.hash(None, bsign.version)
     verify1 = (padding(hash1.hexdigest(),
                        pkey.bitlen//8)) == pow(bsign.sig1,
                                                pkey.public_exponent,
@@ -890,6 +901,8 @@ def main():
     parser_sign.add_argument('--keyform', default='bi',
                              choices=['bi', 'der', 'pem'],
                              help='format of the key - default: bi')
+    parser_sign.add_argument('--version', default=3, choices=[2, 3], type=int,
+                             help='signature version - default: 3')
     parser_sign.set_defaults(func=_sign)
     # create the parser for the "verify" command
     parser_verify = subparsers.add_parser('verify',
