@@ -398,14 +398,15 @@ class PboInfo:
         """Check whether member file needs to be hashed."""
         if version == 2:
             return (self.get_data_size() > 0 and
-                    self.filename.split(b'.')[-1].lower() not in [
-                        b'paa', b'jpg', b'p3d', b'tga', b'rvmat', b'lip',
-                        b'ogg', b'wss', b'png', b'rtm', b'pac', b'fxy', b'wrp'])
+                    not self.filename.lower().endswith((
+                        b'.paa', b'.jpg', b'.p3d', b'.tga', b'.rvmat', b'.lip',
+                        b'.ogg', b'.wss', b'.png', b'.rtm', b'.pac', b'.fxy',
+                        b'.wrp')))
         elif version == 3:
             return (self.get_data_size() > 0 and
-                    self.filename.split(b'.')[-1].lower() in [
-                        b'sqf', b'inc', b'bikb', b'ext', b'fsm', b'sqm', b'hpp',
-                        b'cfg', b'sqs', b'h'])
+                    self.filename.lower().endswith((
+                        b'.sqf', b'.inc', b'.bikb', b'.ext', b'.fsm', b'.sqm',
+                        b'.hpp', b'.cfg', b'.sqs', b'.h')))
         else:
             raise ValueError("Unknown signature version {}".format(version))
 
